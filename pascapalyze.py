@@ -6,11 +6,10 @@ from binascii import *
 from itertools import *
 from collections import *
 from math import *
-from scipy import stats
+from zipfile import ZipFile
 
-def grok(fname):
-    with open(fname, 'rb') as src:
-    #data = open(fname, 'rb').read()
+def grok(fname, ark):
+    with ark.open(fname, 'r') as src:
         nums = []
         count = 0
         data = src.read1(12)
@@ -32,9 +31,6 @@ def transpose(arr):
     c = max(len(a) for a in arr)
     ext = [list(a) + [0]*(c - len(a)) for a in arr]
     return list(zip(*ext))
-
-def loadsets(target1,target2):
-    return grok(target1) + grok(target2)
 
 def mumpf(doubles):
     tdoubles = transpose(doubles)
@@ -71,7 +67,8 @@ def diff(x):
 matchDataType = re.compile("MeasurementName=\"([^\"]+)\"")
 matchSetNo = re.compile("ZTDDRBPUsageName=\"[^\"#]*#([0-9]*)[^\"]*\"")
 matchResult = re.compile("ZCFDICurveFitParameterResultValue=\"([^\"]+)\"")
-def process(text):
+def process(ark):
+    text = str(ark.read("main.xml"))
     data = defaultdict(dict)
     for seg in segment(text, "<DataSource "):
         label = list(re.findall(matchDataType, seg))
@@ -96,19 +93,21 @@ def process(text):
         if name and slp and intsc:
             fits[int(name[0])] = (float(intsc[0]),float(slp[0]))
 
+    if not os.path.exists("out/"):
+        os.mkdir("out/")
     for number, val in sorted(list(data.items()), key=lambda x:x[0]):
         text = "# dump from cap file\n@WITH G0\n@G0 ON\n"
         for i, ( label, (x,y)) in enumerate(sorted(list(val.items()),key=lambda x:x[0])):
             print("Processing:", number,i,label)
             prefix = "# %d, field \"%s\", from %s and %s.\n@TYPE xy\n@    legend string %d \"%s\"\n" % (number,label,str(x),y,i,label)
             if type(x) == float:
-                dep = grok(y)
+                dep = grok(y, ark)
                 if not dep:
                     continue
                 indep = [[x*i for i in range(len(dep[0]))]]
                 things = indep + dep
             else:
-                things = loadsets(x,y)
+                things = grok(x,ark) + grok(y,ark)
             if not things:
                 continue
             body = mumpf(things)
@@ -118,9 +117,5 @@ def process(text):
 
 if __name__ == "__main__":
     indexfile = sys.argv[1]
-    text = open(indexfile,'r').read()
-    import cProfile
-    cProfile.run("process(text)", "restats")
-    import pstats
-    p = pstats.Stats('restats')
-    p.strip_dirs().sort_stats("cumulative").print_stats()
+    ark = ZipFile(indexfile, 'r')
+    process(ark)
