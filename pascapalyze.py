@@ -8,22 +8,19 @@ from collections import *
 from math import *
 from zipfile import ZipFile
 
-def grok(fname, ark):
+def grok(fname, size, ark):
+    if size == 0:
+        return []
     with ark.open(fname, 'r') as src:
         nums = []
         count = 0
-        data = src.read1(12)
-        while data:
-            x = unpack("d",data[4:12])[0]
-            if x == 0:
-                count += 1
-            else:
-                count = 0
-            nums.append(x)
-            if count == 10:
-                break
-            data = src.read1(12)
-        return [nums[:-10]]
+        data = src.read(12 * size)
+        if not data or len(data) != 12 * size:
+            print("Data set did not contain advertised number of elements:", data==None, len(data), 12*size)
+            return []
+        for k in range(4,12*size,12):
+            nums.append(unpack("d",data[k:k+8])[0])
+        return [nums]
 
 def transpose(arr):
     if not arr:
@@ -50,16 +47,20 @@ matcherDep = re.compile("<DependentStorageElement [^>]*FileName=\"([^\"]+)\"")
 matcherIndep = re.compile("<IndependentStorageElement [^>]*FileName=\"([^\"]+)\"")
 matcherTS = re.compile("<IndependentStorageElement [^>]*IntervalCacheInterval=\"([^\"]+)\"")
 matcherNumber = re.compile("DataGroupNumber=\"([^\"]+)\"")
+matcherSize = re.compile("DataCacheDataSize=\"([^\"]+)\"")
 def grab_sets(text):
     dep = list(re.findall(matcherDep, text))
     indep = list(re.findall(matcherIndep, text))
     group = list(re.findall(matcherNumber, text))
     ts = list(re.findall(matcherTS, text))
-    if dep and indep and group:
-        return int(group[0]), indep[0], dep[0]
-    if dep and ts and group:
-        return int(group[0]), float(ts[0]), dep[0]
-    return None,None,None
+    s = list(re.findall(matcherSize,text))
+    if len(s) > 1 and s[0] != s[1]:
+        print("Warning: size mismatch")
+    if dep and indep and group and s:
+        return int(group[0]), indep[0], dep[0], int(s[0])
+    if dep and ts and group and s:
+        return int(group[0]), float(ts[0]), dep[0], int(s[0])
+    return None,None,None,None
 
 def diff(x):
     return map(lambda g: g[1]-g[0], zip(x,x[1:]))
@@ -75,10 +76,10 @@ def process(ark):
         if not label:
             continue
         for subseg in segment(seg, "<DataSet"):
-            number, x, y = grab_sets(subseg)
+            number, x, y, s = grab_sets(subseg)
             if number is None:
                 continue
-            data[number][label[0]] = (x,y)
+            data[number][label[0]] = (x,y,s)
 
     # curve fit parameters (let's not trust these completely)
     fits = {}
@@ -97,17 +98,17 @@ def process(ark):
         os.mkdir("out/")
     for number, val in sorted(list(data.items()), key=lambda x:x[0]):
         text = "# dump from cap file\n@WITH G0\n@G0 ON\n"
-        for i, ( label, (x,y)) in enumerate(sorted(list(val.items()),key=lambda x:x[0])):
+        for i, ( label, (x,y,s)) in enumerate(sorted(list(val.items()),key=lambda x:x[0])):
             print("Processing:", number,i,label)
             prefix = "# %d, field \"%s\", from %s and %s.\n@TYPE xy\n@    legend string %d \"%s\"\n" % (number,label,str(x),y,i,label)
             if type(x) == float:
-                dep = grok(y, ark)
+                dep = grok(y,s, ark)
                 if not dep:
                     continue
                 indep = [[x*i for i in range(len(dep[0]))]]
                 things = indep + dep
             else:
-                things = grok(x,ark) + grok(y,ark)
+                things = grok(x,s,ark) + grok(y,s,ark)
             if not things:
                 continue
             body = mumpf(things)
