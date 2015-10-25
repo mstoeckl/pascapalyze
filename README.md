@@ -8,8 +8,9 @@ that the programs XMGR/XVGR can use in a graph.
 ## How it works
 The .cap files are actually zip files, containing the index `main.xml` and 
 a directory full of data files. The data files contain a single array with
-elements 12 bytes long; the last 8 bytes of those data files can be interpreted
-as a 64-bit-long double.
+elements 12 bytes long; the last 8 bytes of those elements can be interpreted
+as a 64-bit-long double. `main.xml` is sufficiently self-documenting that these
+data files can be mapped to values.
 
 ## Limitations
 Have only run this program on three different files; may not handle everything.

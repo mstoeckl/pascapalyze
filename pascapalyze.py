@@ -68,7 +68,7 @@ def diff(x):
 matchDataType = re.compile("MeasurementName=\"([^\"]+)\"")
 matchSetNo = re.compile("ZTDDRBPUsageName=\"[^\"#]*#([0-9]*)[^\"]*\"")
 matchResult = re.compile("ZCFDICurveFitParameterResultValue=\"([^\"]+)\"")
-def process(ark):
+def process(ark, dirn):
     text = str(ark.read("main.xml"))
     data = defaultdict(dict)
     for seg in segment(text, "<DataSource "):
@@ -94,8 +94,8 @@ def process(ark):
         if name and slp and intsc:
             fits[int(name[0])] = (float(intsc[0]),float(slp[0]))
 
-    if not os.path.exists("out/"):
-        os.mkdir("out/")
+    if not os.path.exists(dirn+"/"):
+        os.mkdir(dirn+"/")
     for number, val in sorted(list(data.items()), key=lambda x:x[0]):
         text = "# dump from cap file\n@WITH G0\n@G0 ON\n"
         for i, ( label, (x,y,s)) in enumerate(sorted(list(val.items()),key=lambda x:x[0])):
@@ -113,10 +113,11 @@ def process(ark):
                 continue
             body = mumpf(things)
             text += (prefix + body + "&\n")
-        open("out/set"+str(number)+".txt", "w").write(text);
+        open(dirn+"/set"+str(number)+".txt", "w").write(text);
 
 
 if __name__ == "__main__":
     indexfile = sys.argv[1]
     ark = ZipFile(indexfile, 'r')
-    process(ark)
+    dirn = ".".join(indexfile.split(".")[:-1])
+    process(ark, dirn)
