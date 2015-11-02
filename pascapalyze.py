@@ -60,14 +60,17 @@ def grab_sets(text):
         return int(group[0]), indep[0], dep[0], int(s[0])
     if dep and ts and group and s:
         return int(group[0]), float(ts[0]), dep[0], int(s[0])
+    print("could not parse: dep,indep,ts,group,s = ",dep,indep,ts,group,s)
     return None,None,None,None
 
 def diff(x):
     return map(lambda g: g[1]-g[0], zip(x,x[1:]))
 
 matchDataType = re.compile("MeasurementName=\"([^\"]+)\"")
+matchDataChannel = re.compile(" ChannelIDName=\"([^\"]+)\"")# space before disambiguates
 matchSetNo = re.compile("ZTDDRBPUsageName=\"[^\"#]*#([0-9]*)[^\"]*\"")
 matchResult = re.compile("ZCFDICurveFitParameterResultValue=\"([^\"]+)\"")
+
 def process(ark, dirn):
     text = str(ark.read("main.xml"))
     data = defaultdict(dict)
@@ -75,11 +78,16 @@ def process(ark, dirn):
         label = list(re.findall(matchDataType, seg))
         if not label:
             continue
+        lblstr = label[0]
+        channel = list(re.findall(matchDataChannel, seg))
+        if channel:
+            lblstr += "-" + channel[0]
         for subseg in segment(seg, "<DataSet"):
             number, x, y, s = grab_sets(subseg)
+            print(number,x,y,s,label)
             if number is None:
                 continue
-            data[number][label[0]] = (x,y,s)
+            data[number][lblstr] = (x,y,s)
 
     # curve fit parameters (let's not trust these completely)
     fits = {}
@@ -98,9 +106,13 @@ def process(ark, dirn):
         os.mkdir(dirn+"/")
     for number, val in sorted(list(data.items()), key=lambda x:x[0]):
         text = "# dump from cap file\n@WITH G0\n@G0 ON\n"
-        for i, ( label, (x,y,s)) in enumerate(sorted(list(val.items()),key=lambda x:x[0])):
+        i = 0
+        for label, (x,y,s) in sorted(list(val.items()),key=lambda x:x[0]):
+            if s == 0:# no data for set
+                continue
             print("Processing:", number,i,label)
             prefix = "# %d, field \"%s\", from %s and %s.\n@TYPE xy\n@    legend string %d \"%s\"\n" % (number,label,str(x),y,i,label)
+            i += 1
             if type(x) == float:
                 dep = grok(y,s, ark)
                 if not dep:
@@ -110,6 +122,7 @@ def process(ark, dirn):
             else:
                 things = grok(x,s,ark) + grok(y,s,ark)
             if not things:
+                print("failed to read:",i,x,y,s,number)
                 continue
             body = mumpf(things)
             text += (prefix + body + "&\n")
