@@ -11,16 +11,23 @@ from zipfile import ZipFile
 def grok(fname, size, ark):
     if size == 0:
         return []
-    with ark.open(fname, 'r') as src:
-        nums = []
-        count = 0
-        data = src.read(12 * size)
-        if not data or len(data) != 12 * size:
-            print("Data set did not contain advertised number of elements:", data==None, len(data), 12*size)
-            return []
-        for k in range(4,12*size,12):
-            nums.append(unpack("d",data[k:k+8])[0])
-        return [nums]
+    # Clean up slashes
+    fname = fname.replace("\\","/")
+    fname = fname.replace("//","/")
+    try:
+        with ark.open(fname, 'r') as src:
+            nums = []
+            count = 0
+            data = src.read(12 * size)
+            if not data or len(data) != 12 * size:
+                print("Data set did not contain advertised number of elements:", data==None, len(data), 12*size)
+                return []
+            for k in range(4,12*size,12):
+                nums.append(unpack("d",data[k:k+8])[0])
+            return [nums]
+    except KeyError:
+        print("Subfile", fname, "not available in archive")
+        return []
 
 def transpose(arr):
     if not arr:
